@@ -1,6 +1,5 @@
 package com.sametsafkan.mssssm.config;
 
-import com.sametsafkan.mssssm.domain.Payment;
 import com.sametsafkan.mssssm.domain.PaymentEvent;
 import com.sametsafkan.mssssm.domain.PaymentState;
 import com.sametsafkan.mssssm.service.PaymentServiceImpl;
@@ -21,7 +20,6 @@ import java.util.EnumSet;
 import java.util.Random;
 
 import static com.sametsafkan.mssssm.domain.PaymentState.*;
-import static com.sametsafkan.mssssm.domain.PaymentState.NEW;
 
 @Slf4j
 @Configuration
@@ -45,7 +43,13 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
                 .and()
                 .withExternal().source(NEW).target(PRE_AUTH).event(PaymentEvent.PRE_AUTH_APPROVED)
                 .and()
-                .withExternal().source(NEW).target(PRE_AUTH_ERROR).event(PaymentEvent.PRE_AUTH_DECLINED);
+                .withExternal().source(NEW).target(PRE_AUTH_ERROR).event(PaymentEvent.PRE_AUTH_DECLINED)
+                .and()
+                .withExternal().source(PRE_AUTH).target(PRE_AUTH).event(PaymentEvent.AUTH).action(authAction())
+                .and()
+                .withExternal().source(PRE_AUTH).target(AUTH).event(PaymentEvent.AUTH_APPROVED)
+                .and()
+                .withExternal().source(PRE_AUTH).target(AUTH_ERROR).event(PaymentEvent.AUTH_DECLINED);
     }
 
     @Override
@@ -64,7 +68,7 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
         return stateContext -> {
             log.info("PreAuth was called");
             //Added randomness to preAuth for approve some of the request and decline rest of it.
-            if(new Random().nextInt(10) < 5){
+            if(new Random().nextInt(10) < 8){
                 log.info("PreAuth approved");
                 Message<PaymentEvent> msg = MessageBuilder.withPayload(PaymentEvent.PRE_AUTH_APPROVED)
                         .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, stateContext.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
@@ -77,6 +81,26 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
                         .build();
                 stateContext.getStateMachine().sendEvent(msg);
             }
+        };
+    }
+
+    public Action<PaymentState, PaymentEvent> authAction(){
+        return stateContext -> {
+          log.info("Auth called...");
+            //Added randomness to preAuth for approve some of the request and decline rest of it.
+          if(new Random().nextInt(10) < 8){
+                log.info("Auth approved");
+              Message<PaymentEvent> message = MessageBuilder.withPayload(PaymentEvent.AUTH_APPROVED)
+                      .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, stateContext.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                      .build();
+              stateContext.getStateMachine().sendEvent(message);
+          }else{
+              log.info("Auth declined");
+              Message<PaymentEvent> message = MessageBuilder.withPayload(PaymentEvent.AUTH_DECLINED)
+                      .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, stateContext.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                      .build();
+              stateContext.getStateMachine().sendEvent(message);
+          }
         };
     }
 }
