@@ -3,8 +3,12 @@ package com.sametsafkan.mssssm.config;
 import com.sametsafkan.mssssm.domain.Payment;
 import com.sametsafkan.mssssm.domain.PaymentEvent;
 import com.sametsafkan.mssssm.domain.PaymentState;
+import com.sametsafkan.mssssm.service.PaymentServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.statemachine.action.Action;
 import org.springframework.statemachine.config.EnableStateMachineFactory;
 import org.springframework.statemachine.config.StateMachineConfigurerAdapter;
 import org.springframework.statemachine.config.builders.StateMachineConfigurationConfigurer;
@@ -14,6 +18,7 @@ import org.springframework.statemachine.listener.StateMachineListenerAdapter;
 import org.springframework.statemachine.state.State;
 
 import java.util.EnumSet;
+import java.util.Random;
 
 import static com.sametsafkan.mssssm.domain.PaymentState.*;
 import static com.sametsafkan.mssssm.domain.PaymentState.NEW;
@@ -36,7 +41,7 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
     @Override
     public void configure(StateMachineTransitionConfigurer<PaymentState, PaymentEvent> transitions) throws Exception {
         transitions
-                .withExternal().source(NEW).target(NEW).event(PaymentEvent.PRE_AUTH)
+                .withExternal().source(NEW).target(NEW).event(PaymentEvent.PRE_AUTH).action(preAuthAction())
                 .and()
                 .withExternal().source(NEW).target(PRE_AUTH).event(PaymentEvent.PRE_AUTH_APPROVED)
                 .and()
@@ -53,5 +58,25 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
         };
 
         config.withConfiguration().listener(adapter);
+    }
+
+    public Action<PaymentState, PaymentEvent> preAuthAction(){
+        return stateContext -> {
+            log.info("PreAuth was called");
+            //Added randomness to preAuth for approve some of the request and decline rest of it.
+            if(new Random().nextInt(10) < 5){
+                log.info("PreAuth approved");
+                Message<PaymentEvent> msg = MessageBuilder.withPayload(PaymentEvent.PRE_AUTH_APPROVED)
+                        .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, stateContext.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                        .build();
+                stateContext.getStateMachine().sendEvent(msg);
+            }else{
+                log.info("PreAuth declined");
+                Message<PaymentEvent> msg = MessageBuilder.withPayload(PaymentEvent.PRE_AUTH_DECLINED)
+                        .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, stateContext.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                        .build();
+                stateContext.getStateMachine().sendEvent(msg);
+            }
+        };
     }
 }
