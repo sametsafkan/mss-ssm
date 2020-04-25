@@ -5,6 +5,8 @@ import com.sametsafkan.mssssm.domain.PaymentEvent;
 import com.sametsafkan.mssssm.domain.PaymentState;
 import com.sametsafkan.mssssm.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.statemachine.StateMachine;
 import org.springframework.statemachine.config.StateMachineFactory;
 import org.springframework.statemachine.support.DefaultStateMachineContext;
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
+
+    private static final String PAYMENT_ID_HEADER = "payment-id";
 
     private final PaymentRepository paymentRepository;
     private final StateMachineFactory stateMachineFactory;
@@ -26,19 +30,29 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public StateMachine<PaymentState, PaymentEvent> paymentPreAuthorization(Long paymentId) {
         StateMachine<PaymentState, PaymentEvent> sm = build(paymentId);
+        sendEvent(paymentId, sm, PaymentEvent.PRE_AUTH);
         return null;
     }
 
     @Override
     public StateMachine<PaymentState, PaymentEvent> paymentAuthorization(Long paymentId) {
         StateMachine<PaymentState, PaymentEvent> sm = build(paymentId);
+        sendEvent(paymentId, sm, PaymentEvent.AUTH_APPROVED);
         return null;
     }
 
     @Override
     public StateMachine<PaymentState, PaymentEvent> declinePaymentAuthorization(Long paymentId) {
         StateMachine<PaymentState, PaymentEvent> sm = build(paymentId);
+        sendEvent(paymentId, sm, PaymentEvent.AUTH_DECLINED);
         return null;
+    }
+
+    private void sendEvent(Long paymentId, StateMachine<PaymentState, PaymentEvent> sm, PaymentEvent event){
+        Message msg = MessageBuilder.withPayload(event)
+                .setHeader(PAYMENT_ID_HEADER, paymentId)
+                .build();
+        sm.sendEvent(msg);
     }
 
     private StateMachine<PaymentState, PaymentEvent> build(Long paymentId){
